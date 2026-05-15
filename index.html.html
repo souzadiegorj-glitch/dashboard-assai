@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Dashboard de Separação — Assaí Maracanã</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; }
+
+    header {
+      background: linear-gradient(135deg, #1a472a 0%, #2d6a4f 60%, #1a472a 100%);
+      padding: 20px 32px; display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 2px solid #52b788; flex-wrap: wrap; gap: 12px;
+    }
+    .header-left h1 { font-size: 1.6rem; font-weight: 700; color: #d8f3dc; }
+    .header-left p  { font-size: 0.85rem; color: #95d5b2; margin-top: 4px; }
+    .header-badge { background: #52b788; color: #081c15; padding: 6px 16px; border-radius: 20px; font-weight: 700; font-size: 0.82rem; }
+
+    .container { max-width: 1400px; margin: 0 auto; padding: 24px 24px 48px; }
+
+    /* ── Import ── */
+    .import-box {
+      background: #161b22; border: 2px dashed #30363d; border-radius: 16px;
+      padding: 26px 30px; margin-bottom: 8px; transition: border-color .2s, background .2s;
+    }
+    .import-box.drag-over { border-color: #52b788; background: #0d2818; }
+    .import-top { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .import-icon { font-size: 2.2rem; }
+    .import-text { flex: 1; }
+    .import-text h3 { font-size: 1rem; font-weight: 700; color: #f0fff4; }
+    .import-text p  { font-size: 0.82rem; color: #6e7681; margin-top: 3px; }
+    .import-btn {
+      background: linear-gradient(135deg, #52b788, #2d6a4f); color: #fff; border: none;
+      border-radius: 10px; padding: 10px 22px; font-size: 0.88rem; font-weight: 700;
+      cursor: pointer; white-space: nowrap; transition: opacity .2s;
+    }
+    .import-btn:hover { opacity: .85; }
+    #fileInput { display: none; }
+    .import-status { margin-top: 12px; padding: 10px 16px; border-radius: 8px; font-size: .83rem; font-weight: 600; display: none; }
+    .import-status.ok  { background: #0d2818; color: #56d364; border: 1px solid #1a4731; }
+    .import-status.err { background: #2b0e0e; color: #f85149; border: 1px solid #6b1111; }
+    .import-history { margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .hist-chip { background: #21262d; border: 1px solid #30363d; border-radius: 20px; padding: 4px 12px; font-size: .75rem; color: #8b949e; display: flex; align-items: center; gap: 6px; }
+    .hist-chip .dot { width: 7px; height: 7px; border-radius: 50%; background: #52b788; }
+
+    /* ── Filtros ── */
+    .filter-card {
+      background: #161b22; border: 1px solid #21262d; border-radius: 14px;
+      padding: 20px 24px; margin-bottom: 24px;
+      display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap;
+    }
+    .filter-group { display: flex; flex-direction: column; gap: 6px; }
+    .filter-group label { font-size: .72rem; font-weight: 700; color: #52b788; text-transform: uppercase; letter-spacing: .7px; }
+    .filter-group input,
+    .filter-group select {
+      background: #0f1117; border: 1px solid #30363d; border-radius: 8px;
+      color: #cdd9e5; padding: 9px 14px; font-size: .85rem; outline: none;
+      min-width: 160px; transition: border-color .2s;
+    }
+    .filter-group input:focus, .filter-group select:focus { border-color: #52b788; }
+
+    /* ── Multi-select separador ── */
+    .ms-wrap { position: relative; min-width: 220px; }
+    .ms-trigger {
+      background: #0f1117; border: 1px solid #30363d; border-radius: 8px;
+      color: #cdd9e5; padding: 9px 36px 9px 14px; font-size: .85rem;
+      cursor: pointer; user-select: none; transition: border-color .2s;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    }
+    .ms-trigger:hover, .ms-trigger.open { border-color: #52b788; }
+    .ms-trigger .ms-arrow { font-size: .7rem; color: #6e7681; flex-shrink: 0; transition: transform .2s; }
+    .ms-trigger.open .ms-arrow { transform: rotate(180deg); }
+    .ms-tags { display: flex; flex-wrap: wrap; gap: 4px; flex: 1; min-width: 0; }
+    .ms-tag {
+      background: #1a4731; color: #52b788; border: 1px solid #2d6a4f;
+      border-radius: 12px; padding: 2px 8px; font-size: .72rem; font-weight: 700;
+      display: flex; align-items: center; gap: 4px; white-space: nowrap;
+    }
+    .ms-tag .rm { cursor: pointer; color: #95d5b2; font-size: .8rem; line-height:1; }
+    .ms-tag .rm:hover { color: #f85149; }
+    .ms-dropdown {
+      position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 999;
+      background: #161b22; border: 1px solid #30363d; border-radius: 10px;
+      max-height: 240px; overflow-y: auto; display: none; box-shadow: 0 8px 24px #00000066;
+    }
+    .ms-dropdown.open { display: block; }
+    .ms-search {
+      padding: 10px 12px; border-bottom: 1px solid #21262d; position: sticky; top: 0;
+      background: #161b22; z-index: 1;
+    }
+    .ms-search input {
+      width: 100%; background: #0f1117; border: 1px solid #30363d; border-radius: 6px;
+      color: #cdd9e5; padding: 6px 10px; font-size: .82rem; outline: none;
+    }
+    .ms-search input:focus { border-color: #52b788; }
+    .ms-option {
+      padding: 9px 14px; cursor: pointer; font-size: .85rem; color: #cdd9e5;
+      display: flex; align-items: center; gap: 10px; transition: background .15s;
+    }
+    .ms-option:hover { background: #1c2128; }
+    .ms-option.selected { background: #0d2818; color: #56d364; }
+    .ms-option input[type=checkbox] { accent-color: #52b788; width: 14px; height: 14px; flex-shrink: 0; cursor: pointer; }
+    .ms-footer {
+      padding: 8px 14px; border-top: 1px solid #21262d; display: flex;
+      gap: 8px; position: sticky; bottom: 0; background: #161b22;
+    }
+    .ms-footer button {
+      flex: 1; padding: 6px; border-radius: 6px; font-size: .78rem; font-weight: 700;
+      cursor: pointer; border: 1px solid #30363d; background: #21262d; color: #cdd9e5;
+      transition: background .2s;
+    }
+    .ms-footer button:hover { background: #30363d; }
+    .ms-footer button.sel-all { background: #1a4731; color: #52b788; border-color: #2d6a4f; }
+    .ms-footer button.sel-all:hover { background: #2d6a4f; }
+    .filter-btn {
+      background: #21262d; color: #cdd9e5; border: 1px solid #30363d;
+      border-radius: 8px; padding: 9px 18px; font-size: .85rem; font-weight: 600;
+      cursor: pointer; transition: background .2s;
+    }
+    .filter-btn:hover { background: #30363d; border-color: #52b788; }
+    .filter-result { font-size: .8rem; color: #6e7681; padding: 9px 0; }
+    .filter-result strong { color: #52b788; }
+
+    /* ── Section title ── */
+    .section-title {
+      font-size: .78rem; font-weight: 700; letter-spacing: 1.2px;
+      text-transform: uppercase; color: #52b788; margin-bottom: 14px; margin-top: 32px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .section-title::after { content: ''; flex: 1; height: 1px; background: #1e3a2a; }
+
+    /* ── KPI ── */
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; }
+    .kpi-card {
+      background: #161b22; border: 1px solid #21262d; border-radius: 12px;
+      padding: 18px 20px; position: relative; overflow: hidden;
+      transition: transform .2s, border-color .2s;
+    }
+    .kpi-card:hover { transform: translateY(-3px); border-color: #52b788; }
+    .kpi-card::before { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: var(--accent, #52b788); }
+    .kpi-icon { font-size: 1.4rem; margin-bottom: 8px; }
+    .kpi-label { font-size: .7rem; color: #8b949e; text-transform: uppercase; letter-spacing: .8px; font-weight: 600; }
+    .kpi-value { font-size: 1.7rem; font-weight: 800; color: #f0fff4; margin-top: 4px; line-height: 1; }
+    .kpi-sub { font-size: .72rem; color: #6e7681; margin-top: 5px; }
+
+    /* ── Charts ── */
+    .chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 18px; }
+    .chart-card { background: #161b22; border: 1px solid #21262d; border-radius: 12px; padding: 20px 22px; }
+    .chart-card h3 { font-size: .82rem; font-weight: 700; color: #8b949e; text-transform: uppercase; letter-spacing: .7px; margin-bottom: 16px; }
+    .chart-wrap { position: relative; height: 255px; }
+    .chart-card.full { grid-column: 1 / -1; }
+    .chart-card.full .chart-wrap { height: 290px; }
+
+    /* ── Performance ── */
+    .perf-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 16px; }
+    .perf-card {
+      background: #161b22; border: 1px solid #21262d; border-radius: 12px;
+      padding: 18px 20px; transition: border-color .2s;
+    }
+    .perf-card:hover { border-color: #52b788; }
+    .perf-header { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+    .perf-avatar {
+      width: 40px; height: 40px; border-radius: 50%; display: flex;
+      align-items: center; justify-content: center; font-size: 1.1rem; font-weight: 700;
+      background: var(--acc, #52b788); color: #081c15; flex-shrink: 0;
+    }
+    .perf-name { font-weight: 700; color: #f0fff4; font-size: .95rem; }
+    .perf-meta { font-size: .75rem; color: #6e7681; margin-top: 2px; }
+    .perf-row { display: flex; justify-content: space-between; font-size: .82rem; margin-bottom: 7px; }
+    .perf-row .lbl { color: #8b949e; }
+    .perf-row .val { font-weight: 700; color: #cdd9e5; }
+    .prog-wrap { margin-top: 12px; }
+    .prog-item { margin-bottom: 8px; }
+    .prog-label { display: flex; justify-content: space-between; font-size: .7rem; color: #6e7681; margin-bottom: 3px; }
+    .prog-bar { height: 5px; background: #21262d; border-radius: 99px; overflow: hidden; }
+    .prog-fill { height: 100%; border-radius: 99px; transition: width .6s ease; }
+    .badge-efic { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: .72rem; font-weight: 700; }
+    .efic-hi { background: #0d2818; color: #56d364; border: 1px solid #1a4731; }
+    .efic-md { background: #2d1a00; color: #f0883e; border: 1px solid #6a3500; }
+    .efic-lo { background: #2b0e0e; color: #f85149; border: 1px solid #6b1111; }
+
+    /* ── Table ── */
+    .table-filter { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
+    .table-filter input { background: #161b22; border: 1px solid #30363d; border-radius: 8px; color: #cdd9e5; padding: 8px 14px; font-size: .83rem; outline: none; width: 240px; }
+    .table-filter input:focus { border-color: #52b788; }
+    .table-wrap { overflow-x: auto; border-radius: 12px; border: 1px solid #21262d; }
+    table { width: 100%; border-collapse: collapse; font-size: .83rem; }
+    thead tr { background: #21262d; }
+    thead th { padding: 11px 13px; text-align: left; font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .7px; color: #8b949e; white-space: nowrap; cursor: pointer; user-select: none; }
+    thead th:hover { color: #52b788; }
+    tbody tr { border-bottom: 1px solid #21262d; transition: background .15s; }
+    tbody tr:hover { background: #1c2128; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody td { padding: 10px 13px; color: #cdd9e5; white-space: nowrap; }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: .7rem; font-weight: 700; }
+    .badge-green  { background: #0d2818; color: #56d364; border: 1px solid #1a4731; }
+    .badge-orange { background: #2d1a00; color: #f0883e; border: 1px solid #6a3500; }
+    .badge-red    { background: #2b0e0e; color: #f85149; border: 1px solid #6b1111; }
+
+    .empty-state { text-align: center; padding: 50px 24px; color: #484f58; }
+    .empty-state .es-icon { font-size: 2.8rem; margin-bottom: 10px; }
+    .empty-state p { font-size: .9rem; }
+
+    footer { text-align: center; padding: 18px; font-size: .74rem; color: #484f58; border-top: 1px solid #21262d; margin-top: 40px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <h1>📦 Dashboard de Separação</h1>
+    <p id="headerInfo">Assaí — Maracanã 2840669 · Canal: iFood</p>
+  </div>
+  <div class="header-badge" id="headerBadge">0 PEDIDOS</div>
+</header>
+
+<div class="container">
+
+  <!-- ══ IMPORTAÇÃO ══ -->
+  <div class="section-title" style="margin-top:0">📂 Importar Dados</div>
+  <div class="import-box" id="dropZone">
+    <div class="import-top">
+      <div class="import-icon">📊</div>
+      <div class="import-text">
+        <h3>Importe sua planilha Excel para atualizar o dashboard</h3>
+        <p>Arraste e solte o arquivo aqui, ou clique no botão → Formato aceito: <strong style="color:#52b788">.xlsx / .xls</strong> · Separador deve ser <strong style="color:#52b788">ponto e vírgula (;)</strong></p>
+      </div>
+      <button class="import-btn" onclick="document.getElementById('fileInput').click()">
+        📁 Selecionar Arquivo Excel
+      </button>
+      <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" onchange="handleFile(this.files[0])"/>
+    </div>
+    <div class="import-status" id="importStatus"></div>
+    <div class="import-history" id="importHistory"></div>
+  </div>
+
+  <!-- ══ FILTROS ══ -->
+  <div class="section-title">🔍 Filtros</div>
+  <div class="filter-card">
+    <div class="filter-group">
+      <label>📅 Data Início</label>
+      <input type="date" id="fDataIni" onchange="applyFilters()"/>
+    </div>
+    <div class="filter-group">
+      <label>📅 Data Fim</label>
+      <input type="date" id="fDataFim" onchange="applyFilters()"/>
+    </div>
+    <div class="filter-group">
+      <label>👤 Operador / Separador</label>
+      <div class="ms-wrap" id="msWrap">
+        <div class="ms-trigger" id="msTrigger" onclick="toggleMs()">
+          <span class="ms-tags" id="msTags"><span style="color:#6e7681">Todos os operadores</span></span>
+          <span class="ms-arrow">▼</span>
+        </div>
+        <div class="ms-dropdown" id="msDropdown">
+          <div class="ms-search"><input type="text" placeholder="🔍 Buscar operador..." oninput="filterMsOptions(this.value)" id="msSearch"/></div>
+          <div id="msOptions"></div>
+          <div class="ms-footer">
+            <button class="sel-all" onclick="selectAllMs()">✅ Todos</button>
+            <button onclick="clearMs()">🗑️ Limpar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="filter-group">
+      <label>🏪 Loja</label>
+      <select id="fLoja" onchange="applyFilters()">
+        <option value="">Todas as lojas</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>📱 Canal</label>
+      <select id="fCanal" onchange="applyFilters()">
+        <option value="">Todos os canais</option>
+      </select>
+    </div>
+    <button class="filter-btn" onclick="clearFilters()">🗑️ Limpar</button>
+    <div class="filter-result" id="filterResult"></div>
+  </div>
+
+  <!-- ══ KPIs ══ -->
+  <div class="section-title">📊 Indicadores Gerais</div>
+  <div class="kpi-grid" id="kpiGrid">
+    <div class="kpi-card" style="--accent:#484f58; grid-column:1/-1">
+      <div class="empty-state"><div class="es-icon">📂</div><p>Importe uma planilha Excel para visualizar os indicadores</p></div>
+    </div>
+  </div>
+
+  <!-- ══ GRÁFICOS ══ -->
+  <div class="section-title">📈 Gráficos e Análises — Médias por Operador</div>
+  <div class="chart-grid" id="chartGrid">
+    <div class="chart-card" style="grid-column:1/-1; border-color:#30363d">
+      <div class="empty-state"><div class="es-icon">📈</div><p>Os gráficos aparecerão aqui após importar os dados</p></div>
+    </div>
+  </div>
+
+  <!-- ══ PERFORMANCE ══ -->
+  <div class="section-title">👤 Performance por Operador</div>
+  <div class="perf-grid" id="perfGrid">
+    <div class="perf-card" style="grid-column:1/-1; border-color:#30363d">
+      <div class="empty-state"><div class="es-icon">👤</div><p>Os cards de performance aparecerão após importar os dados</p></div>
+    </div>
+  </div>
+
+  <!-- ══ TABELA ══ -->
+  <div class="section-title">📋 Tabela Detalhada</div>
+  <div class="table-filter">
+    <input type="text" id="tSearch" placeholder="🔍  Buscar por separador ou nº pedido..." oninput="renderTable(filtered)"/>
+  </div>
+  <div class="table-wrap" id="tableWrap">
+    <div class="empty-state"><div class="es-icon">📋</div><p>Nenhum dado carregado ainda</p></div>
+  </div>
+
+</div>
+<footer>Dashboard de Separação · Assaí Maracanã · Atualizado dinamicamente via Excel</footer>
+
+<script>
+/* ══════════════════════════════════════════════
+   ESTADO
+══════════════════════════════════════════════ */
+let allData   = [];
+let filtered  = [];
+let chartObjs = {};
+let importLog = [];
+let sortCol   = -1, sortAsc = true;
+
+const PALETA = ['#52b788','#58a6ff','#e3b341','#f0883e','#bc8cff','#ff7b72','#3fb950','#79c0ff','#74c69d','#ffa657'];
+
+/* ══════════════════════════════════════════════
+   DRAG & DROP
+══════════════════════════════════════════════ */
+const dz = document.getElementById('dropZone');
+dz.addEventListener('dragover',  e => { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+
+/* ══════════════════════════════════════════════
+   LEITURA DE ARQUIVO (.xlsx / .xls / .csv)
+══════════════════════════════════════════════ */
+function handleFile(file) {
+  if (!file) return;
+  const ext = file.name.split('.').pop().toLowerCase();
+  const reader = new FileReader();
+
+  reader.onload = e => {
+    try {
+      let rows;
+      if (ext === 'csv' || ext === 'txt') {
+        // CSV: lê como texto
+        const text = e.target.result;
+        rows = text.trim().split(/\r?\n/).map(l => l.split(';').map(c => c.trim()));
+      } else {
+        // Excel: usa SheetJS
+        const data = new Uint8Array(e.target.result);
+        const wb   = XLSX.read(data, { type: 'array', cellText: true, cellDates: false });
+        const ws   = wb.Sheets[wb.SheetNames[0]];
+        // Converte para array de arrays (raw como string)
+        const raw  = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
+        // Se o separador for ; dentro de uma célula única (arquivo salvo como csv dentro de xlsx), divide
+        if (raw.length > 0 && raw[0].length === 1 && String(raw[0][0]).includes(';')) {
+          rows = raw.map(r => String(r[0]).split(';').map(c => c.trim()));
+        } else {
+          rows = raw.map(r => r.map(c => String(c).trim()));
+        }
+      }
+
+      if (rows.length < 2) throw new Error('Arquivo vazio ou sem dados');
+      const parsed = buildRecords(rows);
+      if (parsed.length === 0) throw new Error('Nenhum registro válido encontrado. Verifique o formato da planilha.');
+
+      // Merge (evita duplicatas por idPedido)
+      const existIds = new Set(allData.map(d => d.idPedido));
+      const novos    = parsed.filter(d => !existIds.has(d.idPedido));
+      allData = [...allData, ...novos];
+
+      importLog.unshift({ nome: file.name, qtd: novos.length, total: allData.length, ts: new Date().toLocaleString('pt-BR') });
+      renderImportHistory();
+      showStatus(`✅ "${file.name}" importado! ${novos.length} novos registros · Total: ${allData.length}`, 'ok');
+      populateFilters();
+      applyFilters();
+    } catch(err) {
+      showStatus(`❌ Erro ao importar: ${err.message}`, 'err');
+    }
+  };
+
+  if (ext === 'csv' || ext === 'txt') {
+    reader.readAsText(file, 'latin1');
+  } else {
+    reader.readAsArrayBuffer(file);
+  }
+}
+
+/* ══════════════════════════════════════════════
+   PARSE DE REGISTROS
+══════════════════════════════════════════════ */
+function buildRecords(rows) {
+  // Normaliza cabeçalho
+  const hdr = rows[0].map(h =>
+    String(h).toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .replace(/[^a-z0-9]/g,'_')
+  );
+
+  const col = name => hdr.findIndex(h => h.includes(name));
+
+  const iSep    = col('separador');
+  const iLoja   = col('loja');
+  const iPed    = hdr.findIndex(h => h.includes('mero') || (h.includes('pedido') && h.includes('n')));
+  const iItens  = col('total_de_itens');
+  const iTempo  = col('tempo');
+  const iSubs   = col('substitui');
+  const iVPed   = col('valor_total_do_pedido');
+  const iVSep   = col('valor_total_separado');
+  const iData   = col('data');
+  const iIniSep = hdr.findIndex(h => h.includes('inicio') && h.includes('separador'));
+  const iInicio = hdr.findIndex(h => h.includes('inicio') && h.includes('separa') && !h.includes('separador'));
+  const iConc   = col('conclus');
+  const iPesav  = hdr.findIndex(h => h.includes('pesaveis') && !h.includes('nao') && !h.includes('n_o') && !h.includes('valor') && !h.includes('produtos'));
+  const iNPesav = hdr.findIndex(h => (h.includes('n_o_pesav') || h.includes('nao_pesav') || (h.includes('n') && h.includes('pesav'))) && !h.includes('valor'));
+  const iId     = hdr.findIndex(h => h.includes('id') && h.includes('pedido'));
+  const iCanal  = col('canal');
+  const iCancel = col('cancelamento');
+
+  const parseBRL = s => {
+    if (!s) return 0;
+    return parseFloat(String(s).replace(/R\$\s*/g,'').replace(/\./g,'').replace(',','.').trim()) || 0;
+  };
+  const parseDate = s => {
+    if (!s) return null;
+    const m = String(s).match(/(\d{2})\/(\d{2})\/(\d{4})/);
+    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    const m2 = String(s).match(/(\d{4})-(\d{2})-(\d{2})/);
+    if (m2) return `${m2[1]}-${m2[2]}-${m2[3]}`;
+    return null;
+  };
+  const parseTime = s => {
+    if (!s) return '';
+    const m = String(s).match(/(\d{2}:\d{2})/);
+    return m ? m[1] : '';
+  };
+
+  const records = [];
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r || r.length < 3) continue;
+    const sep = iSep >= 0 ? String(r[iSep] || '').trim() : '';
+    if (!sep) continue;
+
+    const iniRaw = iIniSep >= 0 ? r[iIniSep] : (iInicio >= 0 ? r[iInicio] : '');
+    records.push({
+      separador:   sep,
+      loja:        iLoja  >= 0 ? String(r[iLoja]  || '') : '',
+      numPedido:   iPed   >= 0 ? String(r[iPed]   || '') : '',
+      itens:       parseInt(r[iItens]) || 0,
+      tempo:       parseInt(r[iTempo]) || 0,
+      subs:        parseInt(r[iSubs])  || 0,
+      valPed:      parseBRL(iVPed  >= 0 ? r[iVPed]  : ''),
+      valSep:      parseBRL(iVSep  >= 0 ? r[iVSep]  : ''),
+      data:        parseDate(iData >= 0 ? r[iData]  : ''),
+      dataRaw:     iData  >= 0 ? String(r[iData] || '') : '',
+      inicio:      parseTime(iniRaw),
+      conclusao:   parseTime(iConc >= 0 ? r[iConc] : ''),
+      pesaveis:    parseInt(r[iPesav])  || 0,
+      nPesaveis:   parseInt(r[iNPesav]) || 0,
+      cancelamento:(iCancel >= 0 ? String(r[iCancel]||'') : '').toUpperCase().includes('SIM') ? 'SIM' : 'NÃO',
+      canal:       iCanal  >= 0 ? String(r[iCanal]  || '') : '',
+      idPedido:    iId     >= 0 && r[iId] ? String(r[iId]) : `${sep}_${r[iPed]}_${i}`,
+    });
+  }
+  return records;
+}
+
+/* ══════════════════════════════════════════════
+   FILTROS
+══════════════════════════════════════════════ */
+function populateFilters() {
+  const seps   = [...new Set(allData.map(d=>d.separador))].sort();
+  const lojas  = [...new Set(allData.map(d=>d.loja))].sort();
+  const canais = [...new Set(allData.map(d=>d.canal))].sort();
+  const datas  = allData.map(d=>d.data).filter(Boolean).sort();
+  buildMsOptions(seps);
+  fillSelect('fLoja',  lojas,  'Todas as lojas');
+  fillSelect('fCanal', canais, 'Todos os canais');
+  if (datas.length) {
+    document.getElementById('fDataIni').value = datas[0];
+    document.getElementById('fDataFim').value = datas[datas.length-1];
+  }
+}
+
+function fillSelect(id, items, placeholder) {
+  const sel = document.getElementById(id);
+  if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = `<option value="">${placeholder}</option>`;
+  items.forEach(v => {
+    const o = document.createElement('option');
+    o.value = v; o.textContent = v;
+    if (v === cur) o.selected = true;
+    sel.appendChild(o);
+  });
+}
+
+/* ── Multi-select separador ── */
+let selectedSeps = new Set();
+let allSepsList   = [];
+
+function buildMsOptions(seps) {
+  allSepsList = seps;
+  renderMsOptions(seps);
+  renderMsTags();
+}
+
+function renderMsOptions(list) {
+  document.getElementById('msOptions').innerHTML = list.map(s => `
+    <div class="ms-option ${selectedSeps.has(s)?'selected':''}" onclick="toggleMsItem('${s.replace(/'/g,"\\'")}')">
+      <input type="checkbox" ${selectedSeps.has(s)?'checked':''} onclick="event.stopPropagation();toggleMsItem('${s.replace(/'/g,"\\'")}')"/>
+      ${s}
+    </div>`).join('');
+}
+
+function toggleMsItem(s) {
+  if (selectedSeps.has(s)) selectedSeps.delete(s); else selectedSeps.add(s);
+  renderMsOptions(allSepsList.filter(x => x.toLowerCase().includes((document.getElementById('msSearch')?.value||'').toLowerCase())));
+  renderMsTags();
+  applyFilters();
+}
+
+function renderMsTags() {
+  const t = document.getElementById('msTags');
+  if (selectedSeps.size === 0) {
+    t.innerHTML = `<span style="color:#6e7681">Todos os operadores</span>`;
+  } else {
+    t.innerHTML = [...selectedSeps].map(s =>
+      `<span class="ms-tag">${s}<span class="rm" onclick="event.stopPropagation();toggleMsItem('${s.replace(/'/g,"\\'")}')">×</span></span>`
+    ).join('');
+  }
+}
+
+function filterMsOptions(q) {
+  renderMsOptions(allSepsList.filter(s => s.toLowerCase().includes(q.toLowerCase())));
+}
+
+function selectAllMs() {
+  allSepsList.forEach(s => selectedSeps.add(s));
+  renderMsOptions(allSepsList);
+  renderMsTags();
+  applyFilters();
+}
+
+function clearMs() {
+  selectedSeps.clear();
+  renderMsOptions(allSepsList);
+  renderMsTags();
+  applyFilters();
+}
+
+function toggleMs() {
+  const trigger  = document.getElementById('msTrigger');
+  const dropdown = document.getElementById('msDropdown');
+  const open     = dropdown.classList.toggle('open');
+  trigger.classList.toggle('open', open);
+  if (open) setTimeout(()=>document.getElementById('msSearch')?.focus(), 50);
+}
+
+// Fecha ao clicar fora
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('msWrap');
+  if (wrap && !wrap.contains(e.target)) {
+    document.getElementById('msDropdown')?.classList.remove('open');
+    document.getElementById('msTrigger')?.classList.remove('open');
+  }
+});
+
+function applyFilters() {
+  const di    = document.getElementById('fDataIni').value;
+  const df    = document.getElementById('fDataFim').value;
+  const loja  = document.getElementById('fLoja').value;
+  const canal = document.getElementById('fCanal').value;
+
+  filtered = allData.filter(d => {
+    if (di    && d.data && d.data < di)                       return false;
+    if (df    && d.data && d.data > df)                       return false;
+    if (selectedSeps.size > 0 && !selectedSeps.has(d.separador)) return false;
+    if (loja  && d.loja  !== loja)                            return false;
+    if (canal && d.canal !== canal)                           return false;
+    return true;
+  });
+
+  const fr = document.getElementById('filterResult');
+  fr.innerHTML = filtered.length > 0
+    ? `Exibindo <strong>${filtered.length}</strong> de <strong>${allData.length}</strong> pedidos`
+    : `<span style="color:#f85149">Nenhum pedido encontrado</span>`;
+
+  renderDashboard();
+}
+
+function clearFilters() {
+  ['fDataIni','fDataFim'].forEach(id => document.getElementById(id).value = '');
+  clearMs();
+  ['fLoja','fCanal'].forEach(id => document.getElementById(id).value = '');
+  applyFilters();
+}
+
+/* ══════════════════════════════════════════════
+   RENDER PRINCIPAL
+══════════════════════════════════════════════ */
+function renderDashboard() {
+  const d = filtered;
+  if (!d.length) {
+    document.getElementById('kpiGrid').innerHTML    = emptyCard('🔍','Nenhum dado para os filtros selecionados');
+    document.getElementById('chartGrid').innerHTML  = emptyCard('📈','Ajuste os filtros para ver os gráficos');
+    document.getElementById('perfGrid').innerHTML   = emptyCard('👤','Nenhum operador encontrado');
+    document.getElementById('tableWrap').innerHTML  = emptyCard('📋','Nenhum registro encontrado');
+    document.getElementById('headerBadge').textContent = '0 PEDIDOS';
+    return;
+  }
+
+  // KPIs
+  const n        = d.length;
+  const totalVal = d.reduce((s,r)=>s+r.valPed,0);
+  const totalSep = d.reduce((s,r)=>s+r.valSep,0);
+  const itens    = d.reduce((s,r)=>s+r.itens, 0);
+  const subs     = d.reduce((s,r)=>s+r.subs,  0);
+  const pesav    = d.reduce((s,r)=>s+r.pesaveis,0);
+  const tempo    = d.reduce((s,r)=>s+r.tempo,  0);
+  const efic     = totalVal > 0 ? (totalSep/totalVal*100) : 0;
+  const nOps     = new Set(d.map(r=>r.separador)).size;
+  const datas    = d.map(r=>r.data).filter(Boolean).sort();
+  const periodo  = datas.length ? `${fmtDate(datas[0])} a ${fmtDate(datas[datas.length-1])}` : '—';
+
+  document.getElementById('headerBadge').textContent = `🟢 ${n} PEDIDOS`;
+  document.getElementById('headerInfo').textContent  = `Período: ${periodo}  ·  Atualizado em ${new Date().toLocaleString('pt-BR')}`;
+
+  const kpis = [
+    {acc:'#52b788',ico:'🛒',lbl:'Total de Pedidos',     val:n.toLocaleString('pt-BR'),          sub:`Período: ${periodo}`},
+    {acc:'#e3b341',ico:'💰',lbl:'Valor Total Pedido',   val:`R$ ${fmtNum(totalVal)}`,            sub:`Ticket médio R$ ${fmtNum(totalVal/n)}`},
+    {acc:'#58a6ff',ico:'✅',lbl:'Valor Total Separado', val:`R$ ${fmtNum(totalSep)}`,            sub:`Eficiência ${efic.toFixed(1)}%`},
+    {acc:'#f0883e',ico:'⏱️',lbl:'Tempo Médio/Pedido',  val:`${Math.round(tempo/n)} min`,        sub:`Total ${tempo} min`},
+    {acc:'#bc8cff',ico:'📦',lbl:'Média Itens/Pedido',   val:`${(itens/n).toFixed(1)}`,           sub:`Total ${itens} itens`},
+    {acc:'#ff7b72',ico:'🔄',lbl:'Média Subs/Pedido',    val:`${(subs/n).toFixed(1)}`,            sub:`Total ${subs} substituições`},
+    {acc:'#79c0ff',ico:'👥',lbl:'Operadores Ativos',    val:nOps.toLocaleString('pt-BR'),         sub:`${(n/nOps).toFixed(1)} pedidos/operador`},
+  ];
+  document.getElementById('kpiGrid').innerHTML = kpis.map(k=>`
+    <div class="kpi-card" style="--accent:${k.acc}">
+      <div class="kpi-icon">${k.ico}</div>
+      <div class="kpi-label">${k.lbl}</div>
+      <div class="kpi-value">${k.val}</div>
+      <div class="kpi-sub">${k.sub}</div>
+    </div>`).join('');
+
+  renderCharts(d);
+  renderPerformance(d);
+  renderTable(d);
+}
+
+/* ══════════════════════════════════════════════
+   AGRUPAMENTO POR OPERADOR
+══════════════════════════════════════════════ */
+function groupBySep(d) {
+  const map = {};
+  d.forEach(r => {
+    if (!map[r.separador]) map[r.separador] = {peds:0,tempo:0,subs:0,vped:0,vsep:0,itens:0,pesav:0,npesav:0};
+    const s = map[r.separador];
+    s.peds++; s.tempo+=r.tempo; s.subs+=r.subs; s.vped+=r.valPed;
+    s.vsep+=r.valSep; s.itens+=r.itens; s.pesav+=r.pesaveis; s.npesav+=r.nPesaveis;
+  });
+  // Adiciona médias
+  Object.values(map).forEach(s => {
+    s.mediaTempo = s.peds > 0 ? s.tempo / s.peds : 0;
+    s.mediaSubs  = s.peds > 0 ? s.subs  / s.peds : 0;
+    s.mediaItens = s.peds > 0 ? s.itens / s.peds : 0;
+    s.mediaVPed  = s.peds > 0 ? s.vped  / s.peds : 0;
+    s.mediaVSep  = s.peds > 0 ? s.vsep  / s.peds : 0;
+    s.efic       = s.vped > 0 ? (s.vsep / s.vped * 100) : 0;
+  });
+  return map;
+}
+
+/* ══════════════════════════════════════════════
+   GRÁFICOS — MÉDIAS POR OPERADOR
+══════════════════════════════════════════════ */
+const CD = {
+  responsive:true, maintainAspectRatio:false,
+  plugins:{
+    legend:{ labels:{ color:'#8b949e', font:{size:11} } },
+    tooltip:{ backgroundColor:'#161b22', borderColor:'#30363d', borderWidth:1, titleColor:'#f0fff4', bodyColor:'#cdd9e5' }
+  },
+  scales:{
+    x:{ ticks:{color:'#8b949e'}, grid:{color:'#21262d'} },
+    y:{ ticks:{color:'#8b949e'}, grid:{color:'#21262d'} }
+  }
+};
+
+function destroyChart(id) { if(chartObjs[id]){ chartObjs[id].destroy(); delete chartObjs[id]; } }
+function mkChart(id,type,data,options) {
+  destroyChart(id);
+  const ctx = document.getElementById(id);
+  if (!ctx) return;
+  chartObjs[id] = new Chart(ctx,{type,data,options});
+}
+
+function renderCharts(d) {
+  const bySep    = groupBySep(d);
+  const names    = Object.keys(bySep);
+  const byData   = {};
+  d.forEach(r => {
+    const dt = r.data || 'S/D';
+    if(!byData[dt]) byData[dt]={peds:0,vped:0,vsep:0,tempo:0};
+    byData[dt].peds++; byData[dt].vped+=r.valPed; byData[dt].vsep+=r.valSep; byData[dt].tempo+=r.tempo;
+  });
+  const datas   = Object.keys(byData).sort();
+  const totP    = d.reduce((s,r)=>s+r.pesaveis,0);
+  const totNP   = d.reduce((s,r)=>s+r.nPesaveis,0);
+
+  // Monta HTML dos charts
+  document.getElementById('chartGrid').innerHTML = `
+    <div class="chart-card"><h3>⏱️ Média Tempo de Separação por Operador (min)</h3><div class="chart-wrap"><canvas id="c_tempo"></canvas></div></div>
+    <div class="chart-card"><h3>📦 Média de Itens por Pedido — por Operador</h3><div class="chart-wrap"><canvas id="c_itens"></canvas></div></div>
+    <div class="chart-card"><h3>🔄 Média de Substituições por Pedido — por Operador</h3><div class="chart-wrap"><canvas id="c_subs"></canvas></div></div>
+    <div class="chart-card"><h3>💵 Média Valor Pedido vs Separado — por Operador</h3><div class="chart-wrap"><canvas id="c_val"></canvas></div></div>
+    <div class="chart-card"><h3>⚖️ Pesáveis vs Não Pesáveis</h3><div class="chart-wrap"><canvas id="c_pesav"></canvas></div></div>
+    <div class="chart-card"><h3>🎯 Eficiência de Separação (%) por Operador</h3><div class="chart-wrap"><canvas id="c_efic"></canvas></div></div>
+    <div class="chart-card full"><h3>📅 Evolução Diária — Pedidos e Valor</h3><div class="chart-wrap"><canvas id="c_evol"></canvas></div></div>
+    <div class="chart-card full"><h3>🏆 Ranking: Média de Valor Separado por Operador</h3><div class="chart-wrap"><canvas id="c_rank"></canvas></div></div>
+    <div class="chart-card full"><h3>🥇 Ranking: Pedidos por Operador e Média Diária</h3><div class="chart-wrap"><canvas id="c_rankpeds"></canvas></div></div>
+  `;
+
+  // Média de tempo por operador
+  mkChart('c_tempo','bar',{
+    labels: names,
+    datasets:[{label:'Média Tempo (min)',
+      data: names.map(n=>+bySep[n].mediaTempo.toFixed(1)),
+      backgroundColor: names.map((_,i)=>PALETA[i%PALETA.length]+'cc'),
+      borderColor:     names.map((_,i)=>PALETA[i%PALETA.length]),
+      borderWidth:1, borderRadius:6}]
+  },{...CD, plugins:{...CD.plugins,legend:{display:false}}});
+
+  // Média de itens por operador
+  mkChart('c_itens','bar',{
+    labels: names,
+    datasets:[{label:'Média Itens/Pedido',
+      data: names.map(n=>+bySep[n].mediaItens.toFixed(1)),
+      backgroundColor:'#58a6ffcc', borderColor:'#58a6ff', borderWidth:1, borderRadius:6}]
+  },{...CD, plugins:{...CD.plugins,legend:{display:false}}});
+
+  // Média de substituições
+  mkChart('c_subs','bar',{
+    labels: names,
+    datasets:[{label:'Média Subs/Pedido',
+      data: names.map(n=>+bySep[n].mediaSubs.toFixed(1)),
+      backgroundColor:'#ff7b72cc', borderColor:'#ff7b72', borderWidth:1, borderRadius:6}]
+  },{...CD, plugins:{...CD.plugins,legend:{display:false}}});
+
+  // Média valor ped vs sep
+  mkChart('c_val','bar',{
+    labels: names,
+    datasets:[
+      {label:'Média Valor Pedido',   data:names.map(n=>+bySep[n].mediaVPed.toFixed(2)), backgroundColor:'#52b788aa', borderColor:'#52b788', borderWidth:1, borderRadius:6},
+      {label:'Média Valor Separado', data:names.map(n=>+bySep[n].mediaVSep.toFixed(2)), backgroundColor:'#e3b341aa', borderColor:'#e3b341', borderWidth:1, borderRadius:6}
+    ]
+  },{...CD});
+
+  // Pesáveis donut
+  mkChart('c_pesav','doughnut',{
+    labels:['Pesáveis','Não Pesáveis'],
+    datasets:[{data:[totP,totNP],
+      backgroundColor:['#52b788bb','#58a6ffbb'],
+      borderColor:['#52b788','#58a6ff'], borderWidth:2, hoverOffset:8}]
+  },{responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{position:'bottom',labels:{color:'#8b949e',font:{size:11},padding:14}},
+    tooltip:CD.plugins.tooltip}});
+
+  // Eficiência por operador (horizontal bar)
+  mkChart('c_efic','bar',{
+    labels: names,
+    datasets:[{label:'Eficiência (%)',
+      data: names.map(n=>+bySep[n].efic.toFixed(1)),
+      backgroundColor: names.map(n=>{
+        const e=bySep[n].efic;
+        return e>=100?'#52b788cc':e>=90?'#e3b341cc':'#ff7b72cc';
+      }),
+      borderColor: names.map(n=>{
+        const e=bySep[n].efic;
+        return e>=100?'#52b788':e>=90?'#e3b341':'#ff7b72';
+      }),
+      borderWidth:1, borderRadius:6}]
+  },{...CD, indexAxis:'y',
+    plugins:{...CD.plugins,legend:{display:false}},
+    scales:{
+      x:{...CD.scales.x, min:0, max:120, ticks:{...CD.scales.x.ticks, callback:v=>v+'%'}},
+      y:{...CD.scales.y}
+    }});
+
+  // Evolução diária
+  mkChart('c_evol','line',{
+    labels: datas.map(fmtDate),
+    datasets:[
+      {label:'Pedidos', data:datas.map(d=>byData[d].peds), borderColor:'#52b788', backgroundColor:'#52b78822', tension:.4, fill:true, yAxisID:'y'},
+      {label:'Valor Pedido (R$)', data:datas.map(d=>+byData[d].vped.toFixed(2)), borderColor:'#e3b341', backgroundColor:'#e3b34111', tension:.4, fill:false, yAxisID:'y1'},
+    ]
+  },{...CD, interaction:{mode:'index',intersect:false},
+    scales:{
+      x:{ticks:{color:'#8b949e'},grid:{color:'#21262d'}},
+      y:{ticks:{color:'#52b788'},grid:{color:'#21262d'},position:'left',title:{display:true,text:'Pedidos',color:'#52b788'}},
+      y1:{ticks:{color:'#e3b341'},grid:{drawOnChartArea:false},position:'right',title:{display:true,text:'Valor R$',color:'#e3b341'}}
+    }});
+
+  // Ranking: média valor separado
+  const sorted = names.slice().sort((a,b)=>bySep[b].mediaVSep-bySep[a].mediaVSep);
+  mkChart('c_rank','bar',{
+    labels: sorted,
+    datasets:[{label:'Média Valor Separado (R$)',
+      data: sorted.map(n=>+bySep[n].mediaVSep.toFixed(2)),
+      backgroundColor: sorted.map((_,i)=>PALETA[i%PALETA.length]+'cc'),
+      borderColor:     sorted.map((_,i)=>PALETA[i%PALETA.length]),
+      borderWidth:1, borderRadius:6}]
+  },{...CD, indexAxis:'y', plugins:{...CD.plugins,legend:{display:false}}});
+
+  // Ranking: pedidos por operador + média diária
+  // Calcula quantos dias distintos cada operador trabalhou
+  const diasPorSep = {};
+  d.forEach(r => {
+    if (!diasPorSep[r.separador]) diasPorSep[r.separador] = new Set();
+    if (r.data) diasPorSep[r.separador].add(r.data);
+  });
+  const sortedPeds = names.slice().sort((a,b) => bySep[b].peds - bySep[a].peds);
+  const mediaDiaria = sortedPeds.map(n => {
+    const dias = diasPorSep[n] ? diasPorSep[n].size : 1;
+    return +(bySep[n].peds / dias).toFixed(2);
+  });
+  mkChart('c_rankpeds','bar',{
+    labels: sortedPeds,
+    datasets:[
+      {
+        label: 'Total de Pedidos',
+        data: sortedPeds.map(n=>bySep[n].peds),
+        backgroundColor: sortedPeds.map((_,i)=>PALETA[i%PALETA.length]+'cc'),
+        borderColor:     sortedPeds.map((_,i)=>PALETA[i%PALETA.length]),
+        borderWidth:1, borderRadius:6, yAxisID:'y'
+      },
+      {
+        label: 'Média Diária de Pedidos',
+        data: mediaDiaria,
+        type: 'line',
+        borderColor: '#e3b341',
+        backgroundColor: '#e3b34133',
+        pointBackgroundColor: '#e3b341',
+        pointRadius: 5,
+        tension: 0.3,
+        yAxisID: 'y1'
+      }
+    ]
+  },{
+    ...CD,
+    interaction:{ mode:'index', intersect:false },
+    scales:{
+      x:{ ticks:{color:'#8b949e'}, grid:{color:'#21262d'} },
+      y:{ ticks:{color:'#8b949e'}, grid:{color:'#21262d'}, position:'left',
+          title:{ display:true, text:'Total Pedidos', color:'#8b949e' } },
+      y1:{ ticks:{color:'#e3b341'}, grid:{drawOnChartArea:false}, position:'right',
+           title:{ display:true, text:'Média Diária', color:'#e3b341' } }
+    }
+  });
+}
+
+/* ══════════════════════════════════════════════
+   PERFORMANCE CARDS
+══════════════════════════════════════════════ */
+function renderPerformance(d) {
+  const bySep   = groupBySep(d);
+  const names   = Object.keys(bySep).sort((a,b)=>bySep[b].vped-bySep[a].vped);
+  const maxTempo= Math.max(...names.map(n=>bySep[n].mediaTempo)) || 1;
+  const maxSubs = Math.max(...names.map(n=>bySep[n].mediaSubs))  || 1;
+  const maxVal  = Math.max(...names.map(n=>bySep[n].mediaVPed))  || 1;
+
+  document.getElementById('perfGrid').innerHTML = names.map((nm,i) => {
+    const s    = bySep[nm];
+    const acc  = PALETA[i % PALETA.length];
+    const ini  = nm.trim().split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase() || '??';
+    const efic = s.efic;
+    const eficBadge = efic>=100
+      ? `<span class="badge-efic efic-hi">✅ ${efic.toFixed(1)}%</span>`
+      : efic>=90
+        ? `<span class="badge-efic efic-md">⚠️ ${efic.toFixed(1)}%</span>`
+        : `<span class="badge-efic efic-lo">❌ ${efic.toFixed(1)}%</span>`;
+
+    return `
+    <div class="perf-card">
+      <div class="perf-header">
+        <div class="perf-avatar" style="--acc:${acc}">${ini}</div>
+        <div>
+          <div class="perf-name">${nm}</div>
+          <div class="perf-meta">${s.peds} pedido${s.peds>1?'s':''} · Eficiência: ${eficBadge}</div>
+        </div>
+      </div>
+      <div class="perf-row"><span class="lbl">Média Itens/Pedido</span><span class="val">${s.mediaItens.toFixed(1)}</span></div>
+      <div class="perf-row"><span class="lbl">Média Tempo/Pedido</span><span class="val">${s.mediaTempo.toFixed(1)} min</span></div>
+      <div class="perf-row"><span class="lbl">Média Substituições</span><span class="val">${s.mediaSubs.toFixed(1)}</span></div>
+      <div class="perf-row"><span class="lbl">Média Valor Pedido</span><span class="val">R$ ${fmtNum(s.mediaVPed)}</span></div>
+      <div class="perf-row"><span class="lbl">Média Valor Separado</span><span class="val">R$ ${fmtNum(s.mediaVSep)}</span></div>
+      <div class="prog-wrap">
+        <div class="prog-item">
+          <div class="prog-label"><span>Tempo Médio</span><span>${s.mediaTempo.toFixed(1)} min</span></div>
+          <div class="prog-bar"><div class="prog-fill" style="width:${(s.mediaTempo/maxTempo*100).toFixed(0)}%;background:linear-gradient(90deg,#f0883e,#e3b341)"></div></div>
+        </div>
+        <div class="prog-item">
+          <div class="prog-label"><span>Média Substituições</span><span>${s.mediaSubs.toFixed(1)}</span></div>
+          <div class="prog-bar"><div class="prog-fill" style="width:${(s.mediaSubs/maxSubs*100).toFixed(0)}%;background:linear-gradient(90deg,#ff7b72,#bc8cff)"></div></div>
+        </div>
+        <div class="prog-item">
+          <div class="prog-label"><span>Eficiência de Valor</span><span>${efic.toFixed(1)}%</span></div>
+          <div class="prog-bar"><div class="prog-fill" style="width:${Math.min(efic,100).toFixed(0)}%;background:linear-gradient(90deg,#52b788,#95d5b2)"></div></div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ══════════════════════════════════════════════
+   TABELA DETALHADA
+══════════════════════════════════════════════ */
+function renderTable(d) {
+  const q = (document.getElementById('tSearch')?.value || '').toLowerCase();
+  const rows = q ? d.filter(r=>r.separador.toLowerCase().includes(q)||r.numPedido.includes(q)) : d;
+  if (!rows.length) {
+    document.getElementById('tableWrap').innerHTML = `<div class="empty-state"><div class="es-icon">🔍</div><p>Nenhum registro encontrado</p></div>`;
+    return;
+  }
+  document.getElementById('tableWrap').innerHTML = `
+    <table id="dataTable">
+      <thead><tr>
+        ${['Separador','Nº Pedido','Data','Itens','Tempo(min)','Subst.','Valor Pedido','Valor Separado','Diferença','Pesáveis','N.Pesáveis','Início','Conclusão','Canal']
+          .map((h,i)=>`<th onclick="doSort(${i})">${h} ↕</th>`).join('')}
+      </tr></thead>
+      <tbody>
+        ${rows.map((r,i)=>{
+          const dif=r.valSep-r.valPed;
+          const badge=dif>0?`<span class="badge badge-green">+R$&nbsp;${fmtNum(dif)}</span>`
+            :dif<-5?`<span class="badge badge-red">-R$&nbsp;${fmtNum(Math.abs(dif))}</span>`
+            :`<span class="badge badge-orange">≈ Par</span>`;
+          const bg=i%2===0?'':'style="background:#1c2128"';
+          return `<tr ${bg}>
+            <td><b>${r.separador}</b></td>
+            <td class="num">#${r.numPedido}</td>
+            <td>${r.data?fmtDate(r.data):r.dataRaw}</td>
+            <td class="num">${r.itens}</td>
+            <td class="num">${r.tempo>0?r.tempo+' min':'—'}</td>
+            <td class="num">${r.subs}</td>
+            <td class="num">R$ ${fmtNum(r.valPed)}</td>
+            <td class="num">R$ ${fmtNum(r.valSep)}</td>
+            <td class="num">${badge}</td>
+            <td class="num">${r.pesaveis}</td>
+            <td class="num">${r.nPesaveis}</td>
+            <td>${r.inicio}</td>
+            <td>${r.conclusao}</td>
+            <td>${r.canal}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
+}
+
+function doSort(col) {
+  const keys=['separador','numPedido','data','itens','tempo','subs','valPed','valSep','_dif','pesaveis','nPesaveis','inicio','conclusao','canal'];
+  sortAsc = sortCol===col?!sortAsc:true; sortCol=col;
+  const key=keys[col];
+  const sorted=[...filtered].sort((a,b)=>{
+    const va=key==='_dif'?a.valSep-a.valPed:a[key];
+    const vb=key==='_dif'?b.valSep-b.valPed:b[key];
+    return (va<vb?-1:va>vb?1:0)*(sortAsc?1:-1);
+  });
+  renderTable(sorted);
+}
+
+/* ══════════════════════════════════════════════
+   HELPERS
+══════════════════════════════════════════════ */
+function fmtNum(n) { return (n||0).toFixed(2).replace('.',',').replace(/\B(?=(\d{3})+(?!\d))/g,'.'); }
+function fmtDate(iso) { if(!iso)return''; const[y,m,d]=iso.split('-'); return`${d}/${m}/${y}`; }
+function emptyCard(ico,txt) {
+  return `<div style="grid-column:1/-1;background:#161b22;border:1px solid #30363d;border-radius:12px;padding:0">
+    <div class="empty-state"><div class="es-icon">${ico}</div><p>${txt}</p></div></div>`;
+}
+function showStatus(msg,type) {
+  const el=document.getElementById('importStatus');
+  el.textContent=msg; el.className=`import-status ${type}`; el.style.display='block';
+  if(type==='ok') setTimeout(()=>el.style.display='none',6000);
+}
+function renderImportHistory() {
+  document.getElementById('importHistory').innerHTML=importLog.slice(0,5).map(l=>
+    `<div class="hist-chip"><span class="dot"></span><b>${l.nome}</b>&nbsp;·&nbsp;${l.qtd} novos&nbsp;·&nbsp;${l.ts}</div>`
+  ).join('');
+}
+</script>
+</body>
+</html>
